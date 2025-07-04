@@ -71,6 +71,9 @@ frequency_map = {
     "semesterly": relativedelta.relativedelta(months=6),
 }
 
+df["Due"] = pd.to_datetime(df["Due"], errors='coerce', dayfirst=True)  # Convert to datetime
+df = df.sort_values("Due")  # Sort by due date ascending
+
 # Prepare dataframe for data_editor
 view_df = df.copy()
 view_df["Done"] = view_df["Done"].astype(str).str.upper() == "TRUE"
