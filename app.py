@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil import parser, relativedelta
 
 # ----- Dependency check -----
@@ -23,7 +23,7 @@ creds_dict = st.secrets["gcp_service_account"]
 
 # ----- Google Sheets auth -----
 scope = [
-    "https://spreads.google.com/feeds",
+    "https://spreadsheets.google.com/feeds",  # ← Fixed typo here
     "https://www.googleapis.com/auth/drive",
 ]
 
@@ -71,10 +71,10 @@ frequency_map = {
     "semesterly": relativedelta.relativedelta(months=6),
 }
 
+# Sort by "Due" date string, keeping original format
 try:
     df["_sort_due"] = df["Due"].apply(lambda x: parser.parse(x, dayfirst=True))
-    df = df.sort_values("_sort_due")
-    df = df.drop(columns=["_sort_due"])
+    df = df.sort_values("_sort_due").drop(columns=["_sort_due"])
 except Exception as e:
     st.warning(f"Sorting skipped due to date parsing issue: {e}")
 
@@ -95,6 +95,12 @@ edited = st.data_editor(
     key="editor",
 )
 
+# Initialize session state flag
+if "just_updated" not in st.session_state:
+    st.session_state.just_updated = False
+
+update_triggered = False
+
 # Detect changes and sync
 for i, new_row in edited.iterrows():
     old_row = df.iloc[i]
@@ -102,37 +108,33 @@ for i, new_row in edited.iterrows():
     # Handle tick
     if new_row["Done"] and str(old_row["Done"]).upper() != "TRUE":
         try:
-            # 1️⃣ Move due date forward according to frequency
             due = parser.parse(str(old_row["Due"]), dayfirst=True)
-            freq_key = new_row["Frequency"].strip().lower()
+            freq_key = str(new_row.get("Frequency", "")).strip().lower()
             delta = frequency_map.get(freq_key)
             if delta:
                 new_due = due + delta
-                # 2️⃣ Update cells individually to keep column order intact
-                sheet.update_cell(i + 2, df.columns.get_loc("Due") + 1, new_due.strftime("%Y-%m-%d"))
+                sheet.update_cell(i + 2, df.columns.get_loc("Due") + 1, new_due.strftime("%d/%m/%Y"))
                 sheet.update_cell(i + 2, df.columns.get_loc("Status") + 1, "Not started")
-                sheet.update_cell(i + 2, df.columns.get_loc("Done") + 1, False)  # un‑tick
-                st.rerun()
+                sheet.update_cell(i + 2, df.columns.get_loc("Done") + 1, False)
+                update_triggered = True
         except Exception as e:
-            st.error(f"❌ Tick update failed on row {i+2}: {e}")
             st.error(f"❌ Tick update failed on row {i+2}: {e}")
 
     # Handle editable fields
-    for col in ["Priority","Status","Notes"]:
+    for col in ["Priority", "Status", "Notes"]:
         if str(new_row[col]) != str(old_row[col]):
             try:
-                if "just_updated" not in st.session_state:
-    st.session_state.just_updated = False
+                sheet.update_cell(i + 2, df.columns.get_loc(col) + 1, new_row[col])
+                update_triggered = True
+            except Exception as e:
+                st.error(f"❌ Failed updating {col} at row {i+2}: {e}")
 
-# Inside your update logic:
-if not st.session_state.just_updated:
-    sheet.update_cell(...)
+# Avoid infinite rerun loop
+if update_triggered and not st.session_state.just_updated:
     st.session_state.just_updated = True
     st.rerun()
 
-# Reset after rerun
+# Reset rerun flag
 if st.session_state.just_updated:
     st.session_state.just_updated = False
 
-            except Exception as e:
-                st.error(f"❌ Failed updating {col} at row {i+2}: {e}")
