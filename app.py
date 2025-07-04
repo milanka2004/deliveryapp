@@ -71,8 +71,12 @@ frequency_map = {
     "semesterly": relativedelta.relativedelta(months=6),
 }
 
-df["_DueSort"] = pd.to_datetime(df["Due"], format="%d/%m/%Y", errors='coerce')
-df = df.sort_values("_DueSort").drop(columns=["_DueSort"])
+try:
+    df["_sort_due"] = df["Due"].apply(lambda x: parser.parse(x, dayfirst=True))
+    df = df.sort_values("_sort_due")
+    df = df.drop(columns=["_sort_due"])
+except Exception as e:
+    st.warning(f"Sorting skipped due to date parsing issue: {e}")
 
 # Prepare dataframe for data_editor
 view_df = df.copy()
