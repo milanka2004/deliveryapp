@@ -23,7 +23,7 @@ creds_dict = st.secrets["gcp_service_account"]
 
 # ----- Google Sheets auth -----
 scope = [
-    "https://spreadsheets.google.com/feeds",
+    "https://spreads.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
 
@@ -121,7 +121,18 @@ for i, new_row in edited.iterrows():
     for col in ["Priority","Status","Notes"]:
         if str(new_row[col]) != str(old_row[col]):
             try:
-                sheet.update_cell(i+2, df.columns.get_loc(col)+1, new_row[col])
-                st.rerun()
+                if "just_updated" not in st.session_state:
+    st.session_state.just_updated = False
+
+# Inside your update logic:
+if not st.session_state.just_updated:
+    sheet.update_cell(...)
+    st.session_state.just_updated = True
+    st.rerun()
+
+# Reset after rerun
+if st.session_state.just_updated:
+    st.session_state.just_updated = False
+
             except Exception as e:
                 st.error(f"❌ Failed updating {col} at row {i+2}: {e}")
